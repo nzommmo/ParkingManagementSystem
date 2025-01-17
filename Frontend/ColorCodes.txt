@@ -1,0 +1,10 @@
+Color Codes
+
+1. Light Background - #e8fb8d
+2. Dark Background - #ccc80a
+3. LIght Border - #d7e40e
+4. Dark Border - #6e5a15
+5. Headings - #403108
+6. Sub-headings - #826f11
+7. Buttons - #d7e40e
+8. Icons - #d7e40e
