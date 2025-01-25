@@ -46,6 +46,18 @@ CREATE TABLE Payments (
     FOREIGN KEY (TicketId) REFERENCES Tickets(TicketId)
 );
 
+-- Create Loyalty_Points table
+CREATE TABLE Loyalty_Points (
+    LoyaltyId INT PRIMARY KEY AUTO_INCREMENT,
+    UserId INT NOT NULL,
+    Points DECIMAL(10, 2) DEFAULT 0,
+    Total_Points_Earned DECIMAL(10, 2) DEFAULT 0,
+    Last_Earned_Date DATETIME,
+    FOREIGN KEY (UserId) REFERENCES Users(UserId),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 ALTER TABLE Tickets
     MODIFY Start_Time DATETIME DEFAULT CURRENT_TIMESTAMP;
     

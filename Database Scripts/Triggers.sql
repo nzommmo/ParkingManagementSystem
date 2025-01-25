@@ -84,3 +84,39 @@ BEGIN
     END IF;
 END$$
 DELIMITER ;
+
+DELIMITER //
+
+CREATE TRIGGER Add_Loyalty_Points_After_Payment 
+AFTER UPDATE ON Payments 
+FOR EACH ROW 
+BEGIN 
+    DECLARE user_id INT;
+    DECLARE payment_amount DECIMAL(10, 2);
+    DECLARE loyalty_points DECIMAL(10, 2);
+    
+    -- Check if payment is completed
+    IF NEW.Payment_Status = 'Completed' THEN
+        -- Get the associated ticket and user information
+        SELECT t.UserId, p.Amount INTO user_id, payment_amount
+        FROM Payments p
+        JOIN Tickets t ON p.TicketId = t.TicketId
+        WHERE p.PaymentId = NEW.PaymentId;
+        
+        -- Only add loyalty points for registered users
+        IF user_id IS NOT NULL THEN
+            -- Calculate loyalty points (1% of payment amount)
+            SET loyalty_points = ROUND(payment_amount * 0.01, 2);
+            
+            -- Insert or update loyalty points
+            INSERT INTO Loyalty_Points (UserId, Points, Total_Points_Earned, Last_Earned_Date)
+            VALUES (user_id, loyalty_points, loyalty_points, CURRENT_TIMESTAMP)
+            ON DUPLICATE KEY UPDATE 
+                Points = Points + loyalty_points,
+                Total_Points_Earned = Total_Points_Earned + loyalty_points,
+                Last_Earned_Date = CURRENT_TIMESTAMP;
+        END IF;
+    END IF;
+END;//
+
+DELIMITER ;
