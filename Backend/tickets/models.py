@@ -60,7 +60,7 @@ class Ticket(models.Model):
         ('Unpaid', 'Unpaid'),
     ]
 
-    assigned_to = models.CharField(max_length=255, unique=True)  # Vehicle registration number
+    assigned_to = models.CharField(max_length=255,unique=True)  # Vehicle registration number
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     guest_email = models.EmailField(max_length=255, null=True, blank=True)
     guest_phone = models.CharField(max_length=15, null=True, blank=True)

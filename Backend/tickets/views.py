@@ -38,6 +38,35 @@ def login(request):
         'user': UserSerializer(user).data
     })
 
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def create_guest_ticket(request):
+    # Validate that required guest information is provided
+    if not request.data.get('guest_email') and not request.data.get('guest_phone'):
+        return Response(
+            {'error': 'Either guest email or phone number is required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Validate that vehicle registration number is provided
+    if not request.data.get('assigned_to'):
+        return Response(
+            {'error': 'Vehicle registration number is required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Ensure no user ID is passed for guest tickets
+    if 'user' in request.data:
+        request.data.pop('user')
+
+    serializer = TicketSerializer(data=request.data)
+    if serializer.is_valid():
+        ticket = serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_all_users(request):
@@ -203,3 +232,126 @@ def delete_pricing_rate(request, pk):
         return Response(status=status.HTTP_204_NO_CONTENT)
     except PricingRate.DoesNotExist:
         return Response({'error': 'PricingRate not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from .serializers import TicketSerializer
+from .models import Ticket
+from django.core.exceptions import ValidationError
+
+def verify_guest_ownership(ticket, request_data):
+    """
+    Verify ticket ownership using guest credentials
+    """
+    guest_email = request_data.get('guest_email')
+    guest_phone = request_data.get('guest_phone')
+    
+    if not (guest_email or guest_phone):
+        raise ValidationError('Either guest email or phone number is required for verification')
+    
+    # Check if the provided credentials match the ticket
+    if guest_email and ticket.guest_email != guest_email:
+        raise ValidationError('Invalid guest email')
+    if guest_phone and ticket.guest_phone != guest_phone:
+        raise ValidationError('Invalid guest phone')
+    
+    return True
+
+@api_view(['PUT'])
+@permission_classes([AllowAny])
+def update_guest_ticket(request, ticket_id):
+    try:
+        ticket = Ticket.objects.get(id=ticket_id)
+        
+        # Verify this is a guest ticket
+        if ticket.user is not None:
+            return Response(
+                {'error': 'This is not a guest ticket'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify ownership
+        try:
+            verify_guest_ownership(ticket, request.data)
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Prevent changing guest credentials or adding user
+        update_data = request.data.copy()
+        if 'guest_email' in update_data:
+            del update_data['guest_email']
+        if 'guest_phone' in update_data:
+            del update_data['guest_phone']
+        if 'user' in update_data:
+            del update_data['user']
+        
+        serializer = TicketSerializer(ticket, data=update_data, partial=True)
+        if serializer.is_valid():
+            ticket = serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+    except Ticket.DoesNotExist:
+        return Response(
+            {'error': 'Ticket not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['DELETE'])
+@permission_classes([AllowAny])
+def delete_guest_ticket(request, ticket_id):
+    try:
+        ticket = Ticket.objects.get(id=ticket_id)
+        
+        # Verify this is a guest ticket
+        if ticket.user is not None:
+            return Response(
+                {'error': 'This is not a guest ticket'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify ownership
+        try:
+            verify_guest_ownership(ticket, request.data)
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        
+        ticket.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+        
+    except Ticket.DoesNotExist:
+        return Response(
+            {'error': 'Ticket not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_guest_ticket(request, ticket_id):
+    try:
+        ticket = Ticket.objects.get(id=ticket_id)
+        
+        # Verify this is a guest ticket
+        if ticket.user is not None:
+            return Response(
+                {'error': 'This is not a guest ticket'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify ownership
+        try:
+            verify_guest_ownership(ticket, request.GET)
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = TicketSerializer(ticket)
+        return Response(serializer.data)
+        
+    except Ticket.DoesNotExist:
+        return Response(
+            {'error': 'Ticket not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )

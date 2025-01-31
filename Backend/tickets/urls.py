@@ -19,4 +19,8 @@ urlpatterns = [
     path('tickets/<int:ticket_id>', views.get_ticket_by_id),
     path('tickets/<int:ticket_id>/update', views.update_ticket_by_id),
     path('tickets/<int:ticket_id>/delete', views.delete_ticket_by_id),
+    path('tickets/guest/', views.create_guest_ticket, name='create-guest-ticket'),
+    path('tickets/guest/<int:ticket_id>/', views.get_guest_ticket, name='get-guest-ticket'),
+    path('tickets/guest/<int:ticket_id>/update/', views.update_guest_ticket, name='update-guest-ticket'),
+    path('tickets/guest/<int:ticket_id>/delete/', views.delete_guest_ticket, name='delete-guest-ticket'),
 ]
