@@ -23,4 +23,12 @@ urlpatterns = [
     path('tickets/guest/<int:ticket_id>/', views.get_guest_ticket, name='get-guest-ticket'),
     path('tickets/guest/<int:ticket_id>/update/', views.update_guest_ticket, name='update-guest-ticket'),
     path('tickets/guest/<int:ticket_id>/delete/', views.delete_guest_ticket, name='delete-guest-ticket'),
+    path('payments/', views.get_all_payments, name='all-payments'),
+    path('payments/create/', views.create_payment, name='create-payment'),
+    path('payments/<int:payment_id>/', views.get_payment_by_id, name='get-payment'),
+    path('payments/<int:payment_id>/update/', views.update_payment_by_id, name='update-payment'),
+    path('payments/<int:payment_id>/delete/', views.delete_payment_by_id, name='delete-payment'),
+    path('payments/<int:payment_id>/complete/', views.complete_payment, name='complete-payment'),
+    path('payments/pending/', views.get_pending_payments, name='pending-payments'),
+    path('guest/tickets/<int:ticket_id>/payment/', views.get_guest_payment, name='guest-payment'),
 ]

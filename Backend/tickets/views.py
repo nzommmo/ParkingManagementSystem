@@ -1,12 +1,14 @@
-from rest_framework import status
+from rest_framework import status,viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth.hashers import make_password, check_password
 from django.core.exceptions import ObjectDoesNotExist
-from .models import User, Ticket, LoyaltyPoints, PricingRate
-from .serializers import UserSerializer, TicketSerializer, LoyaltyPointsSerializer, PricingRateSerializer
+from .models import User, Ticket, LoyaltyPoints, PricingRate,Payment
+from .serializers import UserSerializer, TicketSerializer, LoyaltyPointsSerializer, PricingRateSerializer,PaymentSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.core.exceptions import ValidationError
+
 
 
 @api_view(['POST'])
@@ -38,33 +40,6 @@ def login(request):
         'user': UserSerializer(user).data
     })
 
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def create_guest_ticket(request):
-    # Validate that required guest information is provided
-    if not request.data.get('guest_email') and not request.data.get('guest_phone'):
-        return Response(
-            {'error': 'Either guest email or phone number is required'}, 
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    # Validate that vehicle registration number is provided
-    if not request.data.get('assigned_to'):
-        return Response(
-            {'error': 'Vehicle registration number is required'}, 
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # Ensure no user ID is passed for guest tickets
-    if 'user' in request.data:
-        request.data.pop('user')
-
-    serializer = TicketSerializer(data=request.data)
-    if serializer.is_valid():
-        ticket = serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['GET'])
@@ -128,6 +103,20 @@ def signup(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_ticket(request):
+    assigned_to = request.data.get('assigned_to')
+    
+    # Check for existing active tickets
+    active_tickets = Ticket.objects.filter(
+        assigned_to=assigned_to,
+        status__in=['Unpaid', 'Payment_In_Progress']
+    )
+    
+    if active_tickets.exists():
+        return Response({
+            'error': 'An active ticket already exists for this vehicle.',
+            'code': 'active_ticket_exists'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
     # Add user to request data if not guest ticket
     if not (request.data.get('guest_email') or request.data.get('guest_phone')):
         request.data['user'] = request.user.id
@@ -137,6 +126,7 @@ def create_ticket(request):
         ticket = serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -234,13 +224,6 @@ def delete_pricing_rate(request, pk):
         return Response({'error': 'PricingRate not found'}, status=status.HTTP_404_NOT_FOUND)
     
 
-from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-from .serializers import TicketSerializer
-from .models import Ticket
-from django.core.exceptions import ValidationError
 
 def verify_guest_ownership(ticket, request_data):
     """
@@ -353,5 +336,211 @@ def get_guest_ticket(request, ticket_id):
     except Ticket.DoesNotExist:
         return Response(
             {'error': 'Ticket not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def create_guest_ticket(request):
+    # Validate required guest information
+    if not request.data.get('guest_email') and not request.data.get('guest_phone'):
+        return Response(
+            {'error': 'Either guest email or phone number is required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Validate vehicle registration number
+    if not request.data.get('assigned_to'):
+        return Response(
+            {'error': 'Vehicle registration number is required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Check for existing active tickets
+    assigned_to = request.data.get('assigned_to')
+    active_tickets = Ticket.objects.filter(
+        assigned_to=assigned_to,
+        status__in=['Unpaid', 'Payment_In_Progress']
+    )
+    
+    if active_tickets.exists():
+        return Response({
+            'error': 'An active ticket already exists for this vehicle.',
+            'code': 'active_ticket_exists'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    # Ensure no user ID is passed for guest tickets
+    if 'user' in request.data:
+        request.data.pop('user')
+
+    serializer = TicketSerializer(data=request.data)
+    if serializer.is_valid():
+        ticket = serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_payment(request):
+    # Check if payment already exists for the ticket
+    ticket_id = request.data.get('ticket')
+    if Payment.objects.filter(ticket_id=ticket_id).exists():
+        return Response(
+            {'error': 'Payment already exists for this ticket'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        ticket = Ticket.objects.get(id=ticket_id)
+        
+        # Calculate amount if end_time is available
+        if ticket.end_time:
+            duration = ticket.end_time - ticket.start_time
+            hours = duration.total_seconds() / 3600
+            # Round up to nearest hour
+            hours = Decimal(str(round(hours + 0.49)))
+            amount = ticket.rate.rate * hours
+            request.data['amount'] = amount
+        
+        serializer = PaymentSerializer(data=request.data)
+        if serializer.is_valid():
+            payment = serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+    except Ticket.DoesNotExist:
+        return Response(
+            {'error': 'Ticket not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_all_payments(request):
+    payments = Payment.objects.all()
+    serializer = PaymentSerializer(payments, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_payment_by_id(request, payment_id):
+    try:
+        payment = Payment.objects.get(id=payment_id)
+        serializer = PaymentSerializer(payment)
+        return Response(serializer.data)
+    except Payment.DoesNotExist:
+        return Response(
+            {'error': 'Payment not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_payment_by_id(request, payment_id):
+    try:
+        payment = Payment.objects.get(id=payment_id)
+        
+        # Prevent updating amount directly
+        if 'amount' in request.data:
+            return Response(
+                {'error': 'Amount cannot be modified directly'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        serializer = PaymentSerializer(payment, data=request.data, partial=True)
+        if serializer.is_valid():
+            payment = serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Payment.DoesNotExist:
+        return Response(
+            {'error': 'Payment not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_payment_by_id(request, payment_id):
+    try:
+        payment = Payment.objects.get(id=payment_id)
+        payment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    except Payment.DoesNotExist:
+        return Response(
+            {'error': 'Payment not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def complete_payment(request, payment_id):
+    try:
+        payment = Payment.objects.get(id=payment_id)
+        
+        if payment.payment_status == 'Completed':
+            return Response(
+                {'error': 'Payment is already completed'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        payment.payment_status = 'Completed'
+        payment.payment_date = timezone.now().date()
+        payment.payment_time = timezone.now().time()
+        payment.save()
+        
+        # Update ticket status
+        ticket = payment.ticket
+        ticket.status = 'Paid'
+        ticket.save()
+        
+        serializer = PaymentSerializer(payment)
+        return Response(serializer.data)
+        
+    except Payment.DoesNotExist:
+        return Response(
+            {'error': 'Payment not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_pending_payments(request):
+    pending_payments = Payment.objects.filter(payment_status='Pending')
+    serializer = PaymentSerializer(pending_payments, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_guest_payment(request, ticket_id):
+    try:
+        ticket = Ticket.objects.get(id=ticket_id)
+        
+        # Verify this is a guest ticket
+        if ticket.user is not None:
+            return Response(
+                {'error': 'This is not a guest ticket'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify ownership using the helper function from your code
+        try:
+            verify_guest_ownership(ticket, request.GET)
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Get associated payment
+        try:
+            payment = Payment.objects.get(ticket=ticket)
+            serializer = PaymentSerializer(payment)
+            return Response(serializer.data)
+        except Payment.DoesNotExist:
+            return Response(
+                {'error': 'No payment found for this ticket'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+    except Ticket.DoesNotExist:
+        return Response(
+            {'error': 'Ticket not found'},
             status=status.HTTP_404_NOT_FOUND
         )

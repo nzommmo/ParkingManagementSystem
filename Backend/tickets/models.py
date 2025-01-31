@@ -1,6 +1,9 @@
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.utils import timezone
+from django.core.exceptions import ValidationError
+
+
 
 class UserManager(BaseUserManager):
     def create_user(self, email, first_name, last_name, password=None):
@@ -60,39 +63,85 @@ class Ticket(models.Model):
         ('Unpaid', 'Unpaid'),
     ]
 
-    assigned_to = models.CharField(max_length=255,unique=True)  # Vehicle registration number
+    assigned_to = models.CharField(max_length=255)  
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     guest_email = models.EmailField(max_length=255, null=True, blank=True)
     guest_phone = models.CharField(max_length=15, null=True, blank=True)
-    start_time = models.DateTimeField(default=timezone.now)
+    start_time = models.DateTimeField(null=True, blank=True)
     end_time = models.DateTimeField(null=True, blank=True)
     rate = models.ForeignKey(PricingRate, on_delete=models.PROTECT)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Unpaid')
     created_at = models.DateTimeField(auto_now_add=True)
 
     @property
-    def stay_duration(self):
+    def formatted_start_time(self):
+        """Return start time in readable format"""
+        if self.start_time:
+            return self.start_time.strftime("%d %b %Y at %H:%M")  # e.g., "31 Jan 2025 at 19:53"
+        return None
+
+    @property
+    def formatted_end_time(self):
+        """Return end time in readable format"""
         if self.end_time:
-            return self.end_time - self.start_time
+            return self.end_time.strftime("%d %b %Y at %H:%M")  # e.g., "31 Jan 2025 at 20:53"
+        return None
+
+    @property
+    def stay_duration(self):
+        """Calculate the duration between start_time and end_time"""
+        if self.end_time and self.start_time:
+            duration = self.end_time - self.start_time
+            total_seconds = duration.total_seconds()
+            hours = int(total_seconds // 3600)
+            minutes = int((total_seconds % 3600) // 60)
+            return f"{hours:02d}:{minutes:02d}"
         return None
 
     def clean(self):
-        from django.core.exceptions import ValidationError
+        # Check for existing active tickets for the same assigned_to
+        active_tickets = Ticket.objects.filter(
+            assigned_to=self.assigned_to,
+            status__in=['Unpaid', 'Payment_In_Progress']
+        )
         
-        # Ensure either user or guest contact info is provided
+        # If editing an existing ticket, exclude current ticket from check
+        if self.pk:
+            active_tickets = active_tickets.exclude(pk=self.pk)
+        
+        if active_tickets.exists():
+            raise ValidationError({
+                'assigned_to': 'An active ticket already exists for this vehicle.'
+            })
+        
         if not self.user and not (self.guest_email or self.guest_phone):
             raise ValidationError("Either a user or guest contact information must be provided")
         
-        # Ensure user and guest info are mutually exclusive
         if self.user and (self.guest_email or self.guest_phone):
             raise ValidationError("User and guest information cannot be provided simultaneously")
 
     def save(self, *args, **kwargs):
-        self.clean()
+        if not self.pk:  # Only set start_time when creating a new ticket
+            self.start_time = timezone.now()
+        self.full_clean()
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Ticket {self.id} - {self.assigned_to}"
+        start_time_str = self.formatted_start_time
+        end_time_str = self.formatted_end_time if self.end_time else "Active"
+        return f"Ticket {self.id} - {self.assigned_to} ({start_time_str} - {end_time_str})"
+
+def can_create_ticket(assigned_to):
+    """
+    Check if a new ticket can be created for a given assigned_to
+    """
+    active_tickets = Ticket.objects.filter(
+        assigned_to=assigned_to,
+        status__in=['Unpaid', 'Payment_In_Progress']
+    )
+    return not active_tickets.exists()
+
+
 
 class Payment(models.Model):
     PAYMENT_METHOD_CHOICES = [
@@ -107,11 +156,11 @@ class Payment(models.Model):
     ]
 
     ticket = models.OneToOneField(Ticket, on_delete=models.PROTECT)
-    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    payment_method = models.CharField(max_length=10, choices=PAYMENT_METHOD_CHOICES, default='Cash')
-    payment_status = models.CharField(max_length=10, choices=PAYMENT_STATUS_CHOICES, default='Pending')
-    payment_date = models.DateField(null=True, blank=True)
-    payment_time = models.TimeField(null=True, blank=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True,blank=True)
+    payment_method = models.CharField(max_length=100, choices=PAYMENT_METHOD_CHOICES, default='Cash')
+    payment_status = models.CharField(max_length=50, choices=PAYMENT_STATUS_CHOICES, default='Pending')
+    payment_date = models.DateField(auto_now_add=True)
+    payment_time = models.TimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Payment for Ticket {self.ticket.id}"
