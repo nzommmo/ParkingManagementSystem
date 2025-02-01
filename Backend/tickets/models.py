@@ -1,7 +1,9 @@
+from decimal import Decimal
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+import datetime
 
 
 
@@ -75,21 +77,18 @@ class Ticket(models.Model):
 
     @property
     def formatted_start_time(self):
-        """Return start time in readable format"""
         if self.start_time:
-            return self.start_time.strftime("%d %b %Y at %H:%M")  # e.g., "31 Jan 2025 at 19:53"
+            return self.start_time.strftime("%d %b %Y at %H:%M")
         return None
 
     @property
     def formatted_end_time(self):
-        """Return end time in readable format"""
         if self.end_time:
-            return self.end_time.strftime("%d %b %Y at %H:%M")  # e.g., "31 Jan 2025 at 20:53"
+            return self.end_time.strftime("%d %b %Y at %H:%M")
         return None
 
     @property
     def stay_duration(self):
-        """Calculate the duration between start_time and end_time"""
         if self.end_time and self.start_time:
             duration = self.end_time - self.start_time
             total_seconds = duration.total_seconds()
@@ -98,14 +97,23 @@ class Ticket(models.Model):
             return f"{hours:02d}:{minutes:02d}"
         return None
 
+    def calculate_amount(self):
+        """Calculate the parking amount based on duration and rate"""
+        if self.end_time and self.start_time:
+            duration = self.end_time - self.start_time
+            hours = duration.total_seconds() / 3600
+            # Round up to nearest hour
+            hours = Decimal(str(round(hours + 0.49)))
+            return self.rate.rate * hours
+        return Decimal('0')
+
     def clean(self):
-        # Check for existing active tickets for the same assigned_to
+        # Check for existing active tickets
         active_tickets = Ticket.objects.filter(
             assigned_to=self.assigned_to,
             status__in=['Unpaid', 'Payment_In_Progress']
         )
         
-        # If editing an existing ticket, exclude current ticket from check
         if self.pk:
             active_tickets = active_tickets.exclude(pk=self.pk)
         
@@ -121,27 +129,32 @@ class Ticket(models.Model):
             raise ValidationError("User and guest information cannot be provided simultaneously")
 
     def save(self, *args, **kwargs):
-        if not self.pk:  # Only set start_time when creating a new ticket
+        if not self.pk:  # New ticket
             self.start_time = timezone.now()
+        
+        # Get the original ticket if it exists
+        if self.pk:
+            old_ticket = Ticket.objects.get(pk=self.pk)
+            end_time_changed = old_ticket.end_time != self.end_time
+        else:
+            end_time_changed = False
+
         self.full_clean()
         super().save(*args, **kwargs)
+
+        # Update associated payment amount if end_time has changed
+        if end_time_changed and self.end_time:
+            try:
+                payment = Payment.objects.get(ticket=self)
+                payment.amount = self.calculate_amount()
+                payment.save()
+            except Payment.DoesNotExist:
+                pass
 
     def __str__(self):
         start_time_str = self.formatted_start_time
         end_time_str = self.formatted_end_time if self.end_time else "Active"
         return f"Ticket {self.id} - {self.assigned_to} ({start_time_str} - {end_time_str})"
-
-def can_create_ticket(assigned_to):
-    """
-    Check if a new ticket can be created for a given assigned_to
-    """
-    active_tickets = Ticket.objects.filter(
-        assigned_to=assigned_to,
-        status__in=['Unpaid', 'Payment_In_Progress']
-    )
-    return not active_tickets.exists()
-
-
 
 class Payment(models.Model):
     PAYMENT_METHOD_CHOICES = [
@@ -156,14 +169,48 @@ class Payment(models.Model):
     ]
 
     ticket = models.OneToOneField(Ticket, on_delete=models.PROTECT)
-    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True,blank=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     payment_method = models.CharField(max_length=100, choices=PAYMENT_METHOD_CHOICES, default='Cash')
     payment_status = models.CharField(max_length=50, choices=PAYMENT_STATUS_CHOICES, default='Pending')
-    payment_date = models.DateField(auto_now_add=True)
-    payment_time = models.TimeField(auto_now_add=True)
+    payment_date = models.DateField(default=timezone.now)
+    payment_time = models.TimeField(default=timezone.now)
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            try:
+                old_payment = Payment.objects.get(pk=self.pk)
+                # Check if status is being changed to Completed
+                if old_payment.payment_status != 'Completed' and self.payment_status == 'Completed':
+                    # Get current time in UTC
+                    current_utc = timezone.now()
+                    # Convert to local timezone
+                    local_time = timezone.localtime(current_utc)
+                    self.payment_date = local_time.date()
+                    self.payment_time = local_time.time()
+                    
+                    # Update the ticket status
+                    self.ticket.status = 'Paid'
+                    self.ticket.save()
+            except Payment.DoesNotExist:
+                pass
+        else:
+            # For new payments
+            current_utc = timezone.now()
+            local_time = timezone.localtime(current_utc)
+            self.payment_date = local_time.date()
+            self.payment_time = local_time.time()
+
+        super().save(*args, **kwargs)
+
+    def get_formatted_time(self):
+        """Return time in 12-hour format"""
+        return self.payment_time.strftime("%I:%M %p")
 
     def __str__(self):
-        return f"Payment for Ticket {self.ticket.id}"
+        formatted_time = self.get_formatted_time()
+        return f"Payment for Ticket {self.ticket.id} - {self.payment_date} {formatted_time}"
+
+
 
 class LoyaltyPoints(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)

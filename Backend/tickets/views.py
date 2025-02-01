@@ -1,3 +1,4 @@
+from decimal import Decimal
 from rest_framework import status,viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -8,7 +9,7 @@ from .models import User, Ticket, LoyaltyPoints, PricingRate,Payment
 from .serializers import UserSerializer, TicketSerializer, LoyaltyPointsSerializer, PricingRateSerializer,PaymentSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.exceptions import ValidationError
-
+from django.utils import timezone
 
 
 @api_view(['POST'])
@@ -151,15 +152,46 @@ def get_ticket_by_id(request, ticket_id):
 def update_ticket_by_id(request, ticket_id):
     try:
         ticket = Ticket.objects.get(id=ticket_id)
+        old_status = ticket.status
+        
+        # Check if status is being updated to Payment_In_Progress
+        new_status = request.data.get('status')
+        if new_status == 'Payment_In_Progress' and old_status != 'Payment_In_Progress':
+            # Set end_time to current time
+            request.data['end_time'] = timezone.now()
+        
+        serializer = TicketSerializer(ticket, data=request.data, partial=True)
+        if serializer.is_valid():
+            updated_ticket = serializer.save()
+            
+            # If status changed to Payment_In_Progress, update or create payment
+            if new_status == 'Payment_In_Progress' and old_status != 'Payment_In_Progress':
+                duration = updated_ticket.end_time - updated_ticket.start_time
+                # Convert to minutes
+                minutes = Decimal(str(round(duration.total_seconds() / 60)))
+                # Calculate amount (rate per minute * number of minutes)
+                amount = (updated_ticket.rate.rate / Decimal('60')) * minutes
+                
+                # Update or create payment
+                payment, created = Payment.objects.get_or_create(
+                    ticket=updated_ticket,
+                    defaults={
+                        'amount': amount,
+                        'payment_status': 'Pending'
+                    }
+                )
+                
+                if not created:
+                    payment.amount = amount
+                    payment.save()
+            
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
     except Ticket.DoesNotExist:
         return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
     
-    serializer = TicketSerializer(ticket, data=request.data, partial=True)
-    if serializer.is_valid():
-        ticket = serializer.save()
-        return Response(serializer.data)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
+    
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def delete_ticket_by_id(request, ticket_id):
