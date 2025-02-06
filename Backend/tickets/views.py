@@ -411,27 +411,36 @@ def create_guest_ticket(request):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+ 
+
+
+# User Payment Endpoints
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def create_payment(request):
-    # Check if payment already exists for the ticket
+def create_user_payment(request):
     ticket_id = request.data.get('ticket')
-    if Payment.objects.filter(ticket_id=ticket_id).exists():
-        return Response(
-            {'error': 'Payment already exists for this ticket'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
     try:
         ticket = Ticket.objects.get(id=ticket_id)
         
-        # Calculate amount if end_time is available
+        # Verify this is a user ticket
+        if ticket.user != request.user:
+            return Response(
+                {'error': 'You do not have permission to create payment for this ticket'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check if payment already exists
+        if Payment.objects.filter(ticket_id=ticket_id).exists():
+            return Response(
+                {'error': 'Payment already exists for this ticket'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Calculate amount
         if ticket.end_time:
             duration = ticket.end_time - ticket.start_time
-            hours = duration.total_seconds() / 3600
-            # Round up to nearest hour
-            hours = Decimal(str(round(hours + 0.49)))
-            amount = ticket.rate.rate * hours
+            minutes = Decimal(str(round(duration.total_seconds() / 60)))
+            amount = (ticket.rate.rate / Decimal('60')) * minutes
             request.data['amount'] = amount
         
         serializer = PaymentSerializer(data=request.data)
@@ -448,29 +457,24 @@ def create_payment(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def get_all_payments(request):
-    payments = Payment.objects.all()
+def get_user_payments(request):
+    # Get all payments for tickets owned by the user
+    payments = Payment.objects.filter(ticket__user=request.user)
     serializer = PaymentSerializer(payments, many=True)
     return Response(serializer.data)
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_payment_by_id(request, payment_id):
-    try:
-        payment = Payment.objects.get(id=payment_id)
-        serializer = PaymentSerializer(payment)
-        return Response(serializer.data)
-    except Payment.DoesNotExist:
-        return Response(
-            {'error': 'Payment not found'},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
-def update_payment_by_id(request, payment_id):
+def update_user_payment(request, payment_id):
     try:
         payment = Payment.objects.get(id=payment_id)
+        
+        # Verify user owns the ticket
+        if payment.ticket.user != request.user:
+            return Response(
+                {'error': 'You do not have permission to update this payment'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         
         # Prevent updating amount directly
         if 'amount' in request.data:
@@ -490,60 +494,19 @@ def update_payment_by_id(request, payment_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
-@api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
-def delete_payment_by_id(request, payment_id):
-    try:
-        payment = Payment.objects.get(id=payment_id)
-        payment.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-    except Payment.DoesNotExist:
-        return Response(
-            {'error': 'Payment not found'},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
+# Guest Payment Endpoints
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def complete_payment(request, payment_id):
-    try:
-        payment = Payment.objects.get(id=payment_id)
-        
-        if payment.payment_status == 'Completed':
-            return Response(
-                {'error': 'Payment is already completed'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        payment.payment_status = 'Completed'
-        payment.payment_date = timezone.now().date()
-        payment.payment_time = timezone.now().time()
-        payment.save()
-        
-        # Update ticket status
-        ticket = payment.ticket
-        ticket.status = 'Paid'
-        ticket.save()
-        
-        serializer = PaymentSerializer(payment)
-        return Response(serializer.data)
-        
-    except Payment.DoesNotExist:
-        return Response(
-            {'error': 'Payment not found'},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_pending_payments(request):
-    pending_payments = Payment.objects.filter(payment_status='Pending')
-    serializer = PaymentSerializer(pending_payments, many=True)
-    return Response(serializer.data)
-
-@api_view(['GET'])
 @permission_classes([AllowAny])
-def get_guest_payment(request, ticket_id):
+def create_guest_payment(request):
+    ticket_id = request.data.get('ticket')
+    
+    # First verify that guest credentials are provided
+    if not request.data.get('guest_email') and not request.data.get('guest_phone'):
+        return Response(
+            {'error': 'Either guest email or phone number is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
     try:
         ticket = Ticket.objects.get(id=ticket_id)
         
@@ -554,13 +517,56 @@ def get_guest_payment(request, ticket_id):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Verify ownership using the helper function from your code
+        # Verify guest ownership
+        try:
+            verify_guest_ownership(ticket, request.data)
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if payment already exists
+        if Payment.objects.filter(ticket_id=ticket_id).exists():
+            return Response(
+                {'error': 'Payment already exists for this ticket'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Calculate amount
+        if ticket.end_time:
+            duration = ticket.end_time - ticket.start_time
+            minutes = Decimal(str(round(duration.total_seconds() / 60)))
+            amount = (ticket.rate.rate / Decimal('60')) * minutes
+            request.data['amount'] = amount
+        
+        serializer = PaymentSerializer(data=request.data)
+        if serializer.is_valid():
+            payment = serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+    except Ticket.DoesNotExist:
+        return Response(
+            {'error': 'Ticket not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_guest_payment_details(request, ticket_id):
+    try:
+        ticket = Ticket.objects.get(id=ticket_id)
+        
+        # Verify this is a guest ticket
+        if ticket.user is not None:
+            return Response(
+                {'error': 'This is not a guest ticket'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify ownership
         try:
             verify_guest_ownership(ticket, request.GET)
         except ValidationError as e:
             return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
         
-        # Get associated payment
         try:
             payment = Payment.objects.get(ticket=ticket)
             serializer = PaymentSerializer(payment)
@@ -576,3 +582,380 @@ def get_guest_payment(request, ticket_id):
             {'error': 'Ticket not found'},
             status=status.HTTP_404_NOT_FOUND
         )
+
+@api_view(['PUT'])
+@permission_classes([AllowAny])
+def update_guest_payment(request, payment_id):
+    try:
+        payment = Payment.objects.get(id=payment_id)
+        ticket = payment.ticket
+        
+        # Verify this is a guest ticket
+        if ticket.user is not None:
+            return Response(
+                {'error': 'This is not a guest ticket'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify ownership
+        try:
+            verify_guest_ownership(ticket, request.data)
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Prevent updating amount directly
+        if 'amount' in request.data:
+            return Response(
+                {'error': 'Amount cannot be modified directly'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        serializer = PaymentSerializer(payment, data=request.data, partial=True)
+        if serializer.is_valid():
+            payment = serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Payment.DoesNotExist:
+        return Response(
+            {'error': 'Payment not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def complete_payment(request, payment_id):
+    try:
+        payment = Payment.objects.get(id=payment_id)
+        
+        # If payment is already completed, return error
+        if payment.payment_status == 'Completed':
+            return Response(
+                {'error': 'Payment is already completed'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        ticket = payment.ticket
+        
+        # For guest tickets, verify ownership
+        if ticket.user is None:
+            try:
+                verify_guest_ownership(ticket, request.data)
+            except ValidationError as e:
+                return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        # For user tickets, verify authenticated user owns the ticket
+        elif request.user.is_authenticated:
+            if ticket.user != request.user:
+                return Response(
+                    {'error': 'You do not have permission to complete this payment'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Complete the payment
+        payment.payment_status = 'Completed'
+        payment.payment_date = timezone.now().date()
+        payment.payment_time = timezone.now().time()
+        payment.save()
+        
+        # Update ticket status
+        ticket.status = 'Paid'
+        ticket.save()
+        
+        # If this is a user ticket, update loyalty points
+        if ticket.user:
+            try:
+                loyalty_points = LoyaltyPoints.objects.get(user=ticket.user)
+                # Add points based on payment amount (1 point per currency unit)
+                points_to_add = int(payment.amount)
+                loyalty_points.points += points_to_add
+                loyalty_points.save()
+            except LoyaltyPoints.DoesNotExist:
+                pass
+        
+        serializer = PaymentSerializer(payment)
+        return Response(serializer.data)
+        
+    except Payment.DoesNotExist:
+        return Response(
+            {'error': 'Payment not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_pending_payments(request):
+    pending_payments = Payment.objects.filter(payment_status='Pending')
+    serializer = PaymentSerializer(pending_payments, many=True)
+    return Response(serializer.data)
+
+
+# User Payment Individual Endpoints
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_payment_details(request, payment_id):
+    try:
+        payment = Payment.objects.get(id=payment_id)
+        
+        # Verify user owns the ticket
+        if payment.ticket.user != request.user:
+            return Response(
+                {'error': 'You do not have permission to view this payment'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = PaymentSerializer(payment)
+        return Response(serializer.data)
+    except Payment.DoesNotExist:
+        return Response(
+            {'error': 'Payment not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_user_payment(request, payment_id):
+    try:
+        payment = Payment.objects.get(id=payment_id)
+        
+        # Verify user owns the ticket
+        if payment.ticket.user != request.user:
+            return Response(
+                {'error': 'You do not have permission to delete this payment'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check payment status before deletion
+        if payment.payment_status == 'Completed':
+            return Response(
+                {'error': 'Cannot delete a completed payment'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        payment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    except Payment.DoesNotExist:
+        return Response(
+            {'error': 'Payment not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+# Guest Payment Individual Endpoints
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_guest_payment_by_id(request, payment_id):
+    try:
+        payment = Payment.objects.get(id=payment_id)
+        
+        # Verify this is a guest ticket
+        ticket = payment.ticket
+        if ticket.user is not None:
+            return Response(
+                {'error': 'This is not a guest ticket'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify ownership
+        try:
+            verify_guest_ownership(ticket, request.GET)
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = PaymentSerializer(payment)
+        return Response(serializer.data)
+    except Payment.DoesNotExist:
+        return Response(
+            {'error': 'Payment not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['DELETE'])
+@permission_classes([AllowAny])
+def delete_guest_payment(request, payment_id):
+    try:
+        payment = Payment.objects.get(id=payment_id)
+        
+        # Verify this is a guest ticket
+        ticket = payment.ticket
+        if ticket.user is not None:
+            return Response(
+                {'error': 'This is not a guest ticket'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify ownership
+        try:
+            verify_guest_ownership(ticket, request.data)
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check payment status before deletion
+        if payment.payment_status == 'Completed':
+            return Response(
+                {'error': 'Cannot delete a completed payment'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        payment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    except Payment.DoesNotExist:
+        return Response(
+            {'error': 'Payment not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_all_user_payments(request):
+    """
+    Get all payments for the authenticated user
+    Supports optional filtering
+    """
+    # Filter payments by the user's tickets
+    payments = Payment.objects.filter(ticket__user=request.user)
+    
+    # Optional query parameter filtering
+    status_filter = request.GET.get('status')
+    if status_filter:
+        payments = payments.filter(payment_status=status_filter)
+    
+    # Optional date range filtering
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    
+    if start_date and end_date:
+        payments = payments.filter(
+            payment_date__range=[start_date, end_date]
+        )
+    
+    serializer = PaymentSerializer(payments, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_all_guest_payments(request):
+    """
+    Get all guest payments with ownership verification
+    """
+    # Require either guest email or phone for verification
+    guest_email = request.GET.get('guest_email')
+    guest_phone = request.GET.get('guest_phone')
+    
+    if not (guest_email or guest_phone):
+        return Response(
+            {'error': 'Either guest email or phone number is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Find all guest tickets matching the provided contact info
+    from .models import Ticket
+    guest_tickets = Ticket.objects.filter(
+        user__isnull=True,
+        guest_email=guest_email if guest_email else None,
+        guest_phone=guest_phone if guest_phone else None
+    )
+    
+    # Get payments for these guest tickets
+    payments = Payment.objects.filter(ticket__in=guest_tickets)
+    
+    # Optional status filtering
+    status_filter = request.GET.get('status')
+    if status_filter:
+        payments = payments.filter(payment_status=status_filter)
+    
+    # Optional date range filtering
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    
+    if start_date and end_date:
+        payments = payments.filter(
+            payment_date__range=[start_date, end_date]
+        )
+    
+    serializer = PaymentSerializer(payments, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_all_payments(request):
+    """
+    Retrieve all payments with comprehensive filtering options
+    Supports user and guest payment retrieval
+    """
+    # Base queryset for all payments
+    payments = Payment.objects.all()
+    
+    # Filtering options
+    
+    # Payment status filter
+    status_filter = request.GET.get('status')
+    if status_filter:
+        payments = payments.filter(payment_status=status_filter)
+    
+    # Date range filtering
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    
+    if start_date and end_date:
+        payments = payments.filter(
+            payment_date__range=[start_date, end_date]
+        )
+    
+    # Ticket type filtering
+    ticket_type = request.GET.get('ticket_type')
+    if ticket_type == 'user':
+        # Only user tickets
+        payments = payments.filter(ticket__user__isnull=False)
+    elif ticket_type == 'guest':
+        # Only guest tickets
+        payments = payments.filter(ticket__user__isnull=True)
+    
+    # Minimum and maximum amount filtering
+    min_amount = request.GET.get('min_amount')
+    max_amount = request.GET.get('max_amount')
+    
+    if min_amount:
+        payments = payments.filter(amount__gte=float(min_amount))
+    if max_amount:
+        payments = payments.filter(amount__lte=float(max_amount))
+    
+    # Sorting
+    sort_by = request.GET.get('sort_by', 'payment_date')
+    sort_order = request.GET.get('sort_order', 'desc')
+    
+    # Validate sort_by parameter to prevent potential SQL injection
+    valid_sort_fields = ['payment_date', 'amount', 'payment_status']
+    if sort_by not in valid_sort_fields:
+        sort_by = 'payment_date'
+    
+    # Apply sorting
+    if sort_order == 'desc':
+        payments = payments.order_by(f'-{sort_by}')
+    else:
+        payments = payments.order_by(sort_by)
+    
+    # Pagination
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 10))
+    start = (page - 1) * page_size
+    end = start + page_size
+    
+    # Total count for pagination metadata
+    total_count = payments.count()
+    
+    # Slice the queryset
+    paginated_payments = payments[start:end]
+    
+    # Serialize the payments
+    serializer = PaymentSerializer(paginated_payments, many=True)
+    
+    # Return response with pagination metadata
+    return Response({
+        'payments': serializer.data,
+        'total_count': total_count,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': (total_count + page_size - 1) // page_size
+    })
+
+    
