@@ -1,16 +1,18 @@
 import { Cable, icons } from "lucide-react";
 import { Wrench,Shirt,Bike,Facebook,Instagram,Twitter,MapPin,Mail,Phone } from "lucide-react";
 
+import image1 from "../assets/images/Hero.png"
 
-
-export const Nav = [
+export const NavLinks = [
     { href: "#", text: "Home" },
     { href: "#", text: "About Us" },
     { href: "#", text: "Contact Us" },
   ];
 
 
-
+export const HeroImage = [
+  {  image:image1  }
+]
 
 
 
