@@ -13,8 +13,8 @@ const Hero = () => {
                     <p className='text-Sub-headings lg:text-2xl md:text-xl sm:text-lg text-sm'>No more paper tickets, get your E-Parking Ticket today via SMS / Email.</p>
                 </div>
                 <div className='flex gap-12 mt-5'>
-                    <div><button className='rounded-md px-3 py-1'>Learn More</button></div>
-                    <div><button className='rounded-md px-3 py-1'>Request Ticket</button></div>
+                    <div className=''>
+                        <button className='rounded-md px-4 py-2 font-medium  '>Learn More</button></div>
                     
                 </div>
 
