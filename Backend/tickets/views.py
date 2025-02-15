@@ -958,4 +958,20 @@ def get_all_payments(request):
         'total_pages': (total_count + page_size - 1) // page_size
     })
 
-    
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_loyalty_points(request):
+    """
+    Fetch loyalty points for the authenticated user.
+    """
+    try:
+        # Fetch loyalty points for the authenticated user
+        loyalty_points = LoyaltyPoints.objects.get(user=request.user)
+        serializer = LoyaltyPointsSerializer(loyalty_points)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except LoyaltyPoints.DoesNotExist:
+        # If no loyalty points exist for the user, return a 404 error
+        return Response(
+            {'error': 'Loyalty points not found for the user.'},
+            status=status.HTTP_404_NOT_FOUND
+        )

@@ -37,6 +37,7 @@ urlpatterns = [
     path('payments/user/all/', views.get_all_user_payments, name='get-all-user-payments'),
     path('payments/guest/all/', views.get_all_guest_payments, name='get-all-guest-payments'),
     path('payments/all/', views.get_all_payments, name='get-all-payments'),
+     path('loyalty-points/', views.get_loyalty_points, name='get_loyalty_points'),
 
 ]
    
