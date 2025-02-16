@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AuthImage from '../../assets/images/Auth.png';
 import axiosInstance from '../../Constants/axiosInstance';
+import { Auth } from '../../Constants';
 
 const SignUp = ({ isOpen, onClose }) => {
   if (!isOpen) return null; // Hide modal when not open
@@ -12,6 +13,20 @@ const SignUp = ({ isOpen, onClose }) => {
   const [errors, setErrors] = useState({}); // Use an object to store multiple errors
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false); // State to track successful signup
+
+  // Disable background scrolling when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'; // Disable scrolling
+    } else {
+      document.body.style.overflow = 'auto'; // Re-enable scrolling
+    }
+
+    // Cleanup function to re-enable scrolling when the component unmounts
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, [isOpen]);
 
   const handleSignup = async (e) => {
     e.preventDefault();
@@ -52,9 +67,18 @@ const SignUp = ({ isOpen, onClose }) => {
 
       {/* Modal content */}
       <div className='fixed inset-0 flex items-center justify-center'>
-        <div className='bg-white items-center flex md:flex-row flex-col justify-center relative z-10'>
-          <div>
-            <img src={AuthImage} className="w-1/2 mx-5" alt="" />
+        <div className='bg-white items-center flex md:flex-row flex-col justify-center relative z-10 max-h-[90vh] overflow-y-auto'>
+          {/* Close button (X) */}
+          <button
+            onClick={onClose}
+            className='absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-2xl'
+          >
+            &times;
+          </button>
+
+          <div></div>
+          <div className='flex items-center justify-center pt-16'>
+            <img src={AuthImage} className="lg:w-1/2 md:w-1/3 sm:w-1/4 w-1/2 mx-5" alt="" />
           </div>
           <div className='bg-white rounded shadow-md flex flex-col px-12 py-6'>
             <div className='text-center'>
@@ -144,16 +168,33 @@ const SignUp = ({ isOpen, onClose }) => {
                     </div>
                   )}
                 </div>
-                <div>
+                <div className='flex justify-center mt-4'>
                   <button
                     type='submit'
-                    className='bg-Buttons rounded-md px-4 py-2 text-white'
+                    className='bg-Buttons rounded-md px-8 py-2 text-Headings'
                     disabled={loading}
                   >
-                    {loading ? 'Signing up...' : 'Sign Up'}
+                    {loading ? 'Creating Account...' : 'Create Account '}
                   </button>
                 </div>
               </form>
+            </div>
+            <div className='pt-4 text-neutral-400 flex items-center justify-center gap-3'>
+              <hr className='w-1/4'/> <span>or Sign up with</span> <hr className='w-1/4'/>
+            </div>
+            <div className='flex justify-center items-center mt-4 gap-3'>
+              {Auth.map((Auth,index)=>(
+              <div key={index}className='flex border rounded px-4 py-1'>
+                {Auth.icon} {Auth.text}
+
+              </div>
+
+              ))}
+      
+            </div>
+            <div className='flex justify-center pt-4'>
+              <h1>Already have an account? <span>Sign in</span></h1>
+          
             </div>
           </div>
         </div>
