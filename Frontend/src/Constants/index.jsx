@@ -1,5 +1,4 @@
-import { Cable, icons } from "lucide-react";
-import { Wrench,Shirt,Bike,Facebook,Instagram,Twitter,MapPin,Mail,Phone } from "lucide-react";
+import {Facebook,Instagram,Twitter,CheckCircle,Smartphone,Leaf,LineChart } from "lucide-react";
 
 import image1 from "../assets/images/Hero.png"
 
@@ -19,24 +18,27 @@ export const HeroImage = [
 
 export const services = [
   {
-    icon: <Cable/>,
-    title: "Convenience and Efficiency",
+    icon: <Smartphone/>,
+    title: "Convenience",
+    checklist: <CheckCircle size={16}/>,
     list:[
         "Time Saving",
         "Time Saving",
     ]  
   },
   {
-    icon: <Cable/>,
-    title: "Convenience and Efficiency",
+    icon: <Leaf/>,
+    title: "Eco-Friendliness",
+    checklist: <CheckCircle size={16}/>,
     list:[
         "Time Saving",
         "Time Saving",
     ]  
   },
   {
-    icon: <Cable/>,
-    title: "Convenience and Efficiency",
+    icon: <LineChart/>,
+    title: "Efficiency",
+    checklist: <CheckCircle size={16}/>,
     list:[
         "Time Saving",
         "Time Saving",

@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 @theme {
-  --color-Light Background: #E8FB8D;
-  --color-Dark Background: #CCC80A;
-  --color-LIght Border: #D7E40E;
-  --color-Dark Border: #6E5A15;
+  --color-Light-Background: #E8FB8D;
+  --color-Dark-Background: #CCC80A;
+  --color-LIght-Border: #D7E40E;
+  --color-Dark-Border: #6E5A15;
   --color-Headings: #403108;
   --color-Sub-headings: #826F11;
   --color-Buttons: #D7E40E;
@@ -41,6 +41,6 @@ span {
   font-family: var(--font-heading);
   color: var(--secondary-color);
 }
-button {
+/* button {
   background-color: var(--button);
-}
+} */

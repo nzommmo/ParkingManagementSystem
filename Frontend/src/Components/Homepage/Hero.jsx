@@ -14,7 +14,7 @@ const Hero = () => {
                 </div>
                 <div className='flex gap-12 mt-5'>
                     <div className=''>
-                        <button className='rounded-md px-4 py-2 font-medium  '>Learn More</button></div>
+                        <button className='bg-Buttons rounded-md px-4 py-2 font-medium  '>Learn More</button></div>
                     
                 </div>
 
