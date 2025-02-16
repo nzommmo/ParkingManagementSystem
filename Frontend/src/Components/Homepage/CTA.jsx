@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import CTAImage from '../../assets/images/CTA.jpeg';
+import Signup from '../Auth/SignUp';
 
 const CTA = () => {
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
   return (
     <div className="relative mt-15">
       <div className="flex flex-col md:flex-row items-stretch justify-center">
@@ -15,7 +18,9 @@ const CTA = () => {
             Enjoy Features such as Loyalty Points, Special Discounts and Ticket History.
           </p>
           <div>
-          <button className="bg-Light-Background px-8 py-1 rounded-md">
+          <button className="bg-Light-Background px-8 py-1 rounded-md"
+            onClick={()=> setIsModalOpen(true)} //Opens the Login Modal
+            >
             Create Account
           </button>
           </div>
@@ -30,6 +35,9 @@ const CTA = () => {
           />
         </div>
       </div>
+      {/* Modal Component */}
+      <Signup isOpen={isModalOpen} onClose={()=> setIsModalOpen(false)} />
+      
     </div>
   );
 };
