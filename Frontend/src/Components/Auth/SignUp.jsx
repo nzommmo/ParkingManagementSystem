@@ -67,7 +67,7 @@ const SignUp = ({ isOpen, onClose }) => {
 
       {/* Modal content */}
       <div className='fixed inset-0 flex items-center justify-center'>
-        <div className='bg-white items-center flex md:flex-row flex-col justify-center relative z-10 max-h-[90vh] overflow-y-auto'>
+        <div className='bg-white items-center flex md:flex-row flex-col justify-center relative z-10 max-h-[90vh] overflow-y-auto overflow-x-hidden'>
           {/* Close button (X) */}
           <button
             onClick={onClose}
