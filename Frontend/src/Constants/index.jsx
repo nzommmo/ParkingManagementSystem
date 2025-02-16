@@ -1,4 +1,4 @@
-import {Facebook,Instagram,Twitter,CheckCircle,Smartphone,Leaf,LineChart } from "lucide-react";
+import {Facebook,Instagram,Twitter,CheckCircle,Smartphone,Leaf,LineChart, Icon } from "lucide-react";
 
 import image1 from "../assets/images/Hero.png"
 
@@ -67,3 +67,11 @@ export const socials = [
   {icon: <Twitter size={18}/>},
 
 ];
+
+export const Auth = [
+  {icon:<Facebook/>,text: "Google"},
+  {icon:<Facebook/>,text: "Apple"},
+  {icon:<Facebook/>,text:"Facebook"}
+
+
+]
