@@ -3,7 +3,7 @@ import AuthImage from '../../assets/images/Auth.png';
 import axiosInstance from '../../Constants/axiosInstance';
 import { Auth } from '../../Constants';
 
-const SignUp = ({ isOpen, onClose }) => {
+const SignUp = ({ isOpen, onClose, onOpenSignIn }) => {
   if (!isOpen) return null; // Hide modal when not open
 
   const [first_name, setFirstName] = useState('');
@@ -60,6 +60,13 @@ const SignUp = ({ isOpen, onClose }) => {
     }
   };
 
+  const handleOpenSignIn = () => {
+    onClose(); // Close SignIn modal first
+    if (onOpenSignIn) {
+      onOpenSignIn(); // Then open SignUp modal
+    }
+  };
+
   return (
     <div className='fixed inset-0 z-50'>
       {/* Full-screen backdrop blur overlay */}
@@ -78,7 +85,7 @@ const SignUp = ({ isOpen, onClose }) => {
 
           <div></div>
           <div className='flex items-center justify-center pt-16'>
-            <img src={AuthImage} className="lg:w-1/2 md:w-1/3 sm:w-1/4 w-1/2 mx-5" alt="" />
+            <img src={AuthImage} className="lg:w-1/2 w-2/8 lg:pt-0 pt-42 mx-5" alt="" />
           </div>
           <div className='bg-white rounded shadow-md flex flex-col px-12 py-6'>
             <div className='text-center'>
@@ -193,7 +200,17 @@ const SignUp = ({ isOpen, onClose }) => {
       
             </div>
             <div className='flex justify-center pt-4'>
-              <h1>Already have an account? <span>Sign in</span></h1>
+              <h1>Already have an account? {' '}
+                <span>
+                <button
+                  type="button"
+                  onClick={handleOpenSignIn}
+                  className="text-Sub-headings hover:text-blue-800"
+                >
+                  Sign In
+                </button>
+                </span>
+                </h1>
           
             </div>
           </div>
