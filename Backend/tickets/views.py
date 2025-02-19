@@ -10,7 +10,37 @@ from .serializers import UserSerializer, TicketSerializer, LoyaltyPointsSerializ
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from rest_framework_simplejwt.exceptions import TokenError
 
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def refresh_token(request):
+    """
+    Refresh access token using a valid refresh token
+    """
+    refresh_token = request.data.get('refresh')
+    
+    if not refresh_token:
+        return Response(
+            {'error': 'Refresh token is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Verify and refresh the token
+        refresh = RefreshToken(refresh_token)
+        
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh)
+        })
+        
+    except TokenError as e:
+        return Response(
+            {'error': f'Invalid refresh token: {str(e)}', 'code': 'invalid_token'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
 
 @api_view(['POST'])
 @permission_classes([AllowAny])

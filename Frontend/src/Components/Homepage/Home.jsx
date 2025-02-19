@@ -5,7 +5,7 @@ import Info from './Info'
 import CTA from './CTA'
 import Footer from './Footer'
 
-export const Home = () => {
+const Home = () => {
   return (
         <>
         <NavBar/>
@@ -16,3 +16,5 @@ export const Home = () => {
         </>
   )
 }
+
+export default Home;

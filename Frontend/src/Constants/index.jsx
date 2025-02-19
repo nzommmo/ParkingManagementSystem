@@ -3,7 +3,7 @@ import {Facebook,Instagram,Twitter,CheckCircle,Smartphone,Leaf,LineChart, Icon }
 import image1 from "../assets/images/Hero.png"
 
 export const NavLinks = [
-    { href: "#", text: "Home" },
+    { href: "/", text: "Home" },
     { href: "#", text: "About Us" },
     { href: "#", text: "Contact Us" },
   ];

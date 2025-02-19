@@ -30,6 +30,8 @@ const SignIn = ({ isOpen, onClose, onOpenSignUp }) => {
       });
 
       console.log('Signin Successful:', response.data);
+      localStorage.setItem('accessToken', response.data.access);
+      localStorage.setItem('refreshToken', response.data.refresh);
       setSuccess(true);
       clearForm(); // Clear the form after successful submission
       setTimeout(() => {

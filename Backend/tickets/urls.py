@@ -2,7 +2,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-
+    path('token/refresh/', views.refresh_token, name='token_refresh'),
     path('users/', views.get_all_users, name='get_all_users'),  # Get all users
     path('user/<int:user_id>/', views.get_user_by_id, name='get_user_by_id'),  # Get user by ID
     path('user/<int:user_id>/update/', views.update_user_by_id, name='update_user_by_id'),  # Update user by ID
