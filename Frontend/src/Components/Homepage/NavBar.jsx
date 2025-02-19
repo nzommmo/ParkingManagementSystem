@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLinks } from '../../Constants';
 import SignUp from '../Auth/SignUp';
 import SignIn from '../Auth/SignIn';
+import { Link } from 'react-router-dom';
 
 const NavBar = () => {
     const [isSignUpModalOpen, setIsSignUpModalOpen] = useState(false);
@@ -51,7 +52,9 @@ const NavBar = () => {
         <div className="relative mt-5">
             <div className="flex justify-between items-center mx-5">
                 <div>
-                    <h1 className="lg:text-5xl md:text-3xl sm:text-2xl text-lg">Park Nasi</h1>
+                    <h1 className="lg:text-5xl md:text-3xl sm:text-2xl text-lg">
+                    <Link to='/'>Park Nasi</Link>
+                        </h1>
                 </div>
                 
                 {/* Hamburger Menu Icon for Mobile */}
@@ -81,7 +84,7 @@ const NavBar = () => {
                 <div className="hidden md:flex gap-6 items-center text-Sub-headings md:text-xl text-md">
                     {NavLinks.map((NavLink, index) => (
                         <ul key={index}>
-                            <li><a href={NavLink.href}>{NavLink.text}</a></li>
+                            <li><Link to={NavLink.href}>{NavLink.text}</Link></li>
                         </ul>
                     ))}
                     <button
@@ -105,12 +108,11 @@ const NavBar = () => {
                     <div className="flex flex-col p-4">
                         {NavLinks.map((NavLink, index) => (
                             <div key={index} className="py-2">
-                                <a 
-                                    href={NavLink.href} 
+                                <Link to={NavLink.href} 
                                     className="block text-Sub-headings text-lg hover:bg-gray-100 px-4 py-2 rounded transition-colors"
                                 >
                                     {NavLink.text}
-                                </a>
+                                </Link>
                             </div>
                         ))}
                         <button
