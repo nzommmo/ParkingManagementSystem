@@ -3,6 +3,8 @@ import RequestImage from '../../assets/images/RequestTicket.png'
 import NavBar from '../Homepage/NavBar'
 import Footer from '../Homepage/Footer'
 import axiosInstance from '../../Constants/axiosInstance'
+import { useNavigate } from 'react-router-dom'
+
 
 const RequestGuestTicket = () => {
 
@@ -13,6 +15,9 @@ const RequestGuestTicket = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+
+    const navigate = useNavigate()
+
 
     // Prepare the payload as expected by the endpoint
     const payload = {
@@ -27,6 +32,10 @@ const RequestGuestTicket = () => {
       setPhoneNumber('')
       setEmail('')
       setVehicleRegistration('')
+      setTimeout(() => {
+        navigate('/ticket');
+      }, 3000); // 2000ms (2 seconds) delay
+
     }
     catch (error) {
       // Handle Error Response

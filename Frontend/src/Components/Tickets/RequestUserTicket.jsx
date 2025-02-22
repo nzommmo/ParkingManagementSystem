@@ -3,6 +3,8 @@ import RequestImage from '../../assets/images/RequestTicket.png';
 import NavBar from '../Homepage/NavBar';
 import Footer from '../Homepage/Footer';
 import axiosInstance from '../../Constants/axiosInstance';
+import { useNavigate } from 'react-router-dom';
+
 
 const RequestUserTicket = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -21,6 +23,8 @@ const RequestUserTicket = () => {
     }
   }, []);
 
+  const navigate = useNavigate();
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -37,6 +41,9 @@ const RequestUserTicket = () => {
       setPhoneNumber('');
       setEmail('');
       setVehicleRegistration('');
+      setTimeout(() => {
+        navigate('/ticket');
+      }, 3000); // 2000ms (2 seconds) delay
       // Optionally reset rate if needed:
       // setRate("1");
     } catch (error) {
