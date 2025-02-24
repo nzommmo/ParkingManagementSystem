@@ -1,4 +1,12 @@
 import React from 'react';
+import { QRCodeCanvas } from 'qrcode.react';
+
+const QRcode = {
+  name: "John Doe",
+  email: "john@example.com",
+  phone: "+1234567890"
+};
+
 
 const Ticket = () => {
   return (
@@ -44,7 +52,9 @@ const Ticket = () => {
           </div>
           <div className='bg-Light-Background rounded-md px-2 py-2 '>
             <div className='flex justify-center items-center'>
-                3
+            <div className='opacity-80 py-4'>
+      <QRCodeCanvas value={JSON.stringify(QRcode)} size={180} />
+    </div>
             </div>
             <div className='mx-4'>
                 <p><span className='text-Headings'>Note:</span></p>
