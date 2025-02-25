@@ -164,7 +164,36 @@ def create_ticket(request):
 def get_all_tickets(request):
     tickets = Ticket.objects.all()
     serializer = TicketSerializer(tickets, many=True)
-    return Response(serializer.data)
+    
+    # Enhance response with amount and duration information
+    enhanced_response = []
+    for ticket_data in serializer.data:
+        ticket_obj = Ticket.objects.get(id=ticket_data['id'])
+        
+        # Calculate duration in minutes if start and end time exist
+        duration_minutes = None
+        if ticket_obj.start_time and ticket_obj.end_time:
+            duration = ticket_obj.end_time - ticket_obj.start_time
+            duration_minutes = round(duration.total_seconds() / 60)
+        
+        # Get payment amount if exists
+        amount = None
+        try:
+            payment = Payment.objects.get(ticket=ticket_obj)
+            amount = payment.amount
+        except Payment.DoesNotExist:
+            # If payment doesn't exist but we have duration, calculate estimated amount
+            if duration_minutes is not None and ticket_obj.rate:
+                amount = (ticket_obj.rate.rate / Decimal('60')) * Decimal(str(duration_minutes))
+                amount = round(amount, 2)
+        
+        # Add the additional fields to the response
+        enhanced_ticket = ticket_data.copy()
+        enhanced_ticket['duration_minutes'] = duration_minutes
+        enhanced_ticket['amount'] = amount
+        enhanced_response.append(enhanced_ticket)
+    
+    return Response(enhanced_response)
 
 
 @api_view(['GET'])
@@ -173,7 +202,32 @@ def get_ticket_by_id(request, ticket_id):
     try:
         ticket = Ticket.objects.get(id=ticket_id)
         serializer = TicketSerializer(ticket)
-        return Response(serializer.data)
+        
+        # Create enhanced response with additional fields
+        enhanced_response = serializer.data.copy()
+        
+        # Calculate duration in minutes if start and end time exist
+        duration_minutes = None
+        if ticket.start_time and ticket.end_time:
+            duration = ticket.end_time - ticket.start_time
+            duration_minutes = round(duration.total_seconds() / 60)
+        
+        # Get payment amount if exists
+        amount = None
+        try:
+            payment = Payment.objects.get(ticket=ticket)
+            amount = payment.amount
+        except Payment.DoesNotExist:
+            # If payment doesn't exist but we have duration, calculate estimated amount
+            if duration_minutes is not None and ticket.rate:
+                amount = (ticket.rate.rate / Decimal('60')) * Decimal(str(duration_minutes))
+                amount = round(amount, 2)
+        
+        # Add the additional fields to the response
+        enhanced_response['duration_minutes'] = duration_minutes
+        enhanced_response['amount'] = amount
+        
+        return Response(enhanced_response)
     except Ticket.DoesNotExist:
         return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -393,7 +447,32 @@ def get_guest_ticket(request, ticket_id):
             return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
         
         serializer = TicketSerializer(ticket)
-        return Response(serializer.data)
+        
+        # Create enhanced response with additional fields
+        enhanced_response = serializer.data.copy()
+        
+        # Calculate duration in minutes if start and end time exist
+        duration_minutes = None
+        if ticket.start_time and ticket.end_time:
+            duration = ticket.end_time - ticket.start_time
+            duration_minutes = round(duration.total_seconds() / 60)
+        
+        # Get payment amount if exists
+        amount = None
+        try:
+            payment = Payment.objects.get(ticket=ticket)
+            amount = payment.amount
+        except Payment.DoesNotExist:
+            # If payment doesn't exist but we have duration, calculate estimated amount
+            if duration_minutes is not None and ticket.rate:
+                amount = (ticket.rate.rate / Decimal('60')) * Decimal(str(duration_minutes))
+                amount = round(amount, 2)
+        
+        # Add the additional fields to the response
+        enhanced_response['duration_minutes'] = duration_minutes
+        enhanced_response['amount'] = amount
+        
+        return Response(enhanced_response)
         
     except Ticket.DoesNotExist:
         return Response(
